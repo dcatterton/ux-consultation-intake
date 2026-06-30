@@ -86,16 +86,24 @@ body {
   gap: var(--forge-spacing-medium);
 }
 
-.submission-detail-grid {
+.submission-detail-section {
   display: grid;
   gap: var(--forge-spacing-medium);
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  padding-block: var(--forge-spacing-medium);
 }
 
-.submission-detail-item {
-  border: 1px solid var(--forge-theme-outline);
-  border-radius: var(--forge-shape-medium);
-  padding: var(--forge-spacing-medium);
+.submission-detail-section-description {
+  margin-bottom: 0;
+}
+
+.submission-detail-fields {
+  display: grid;
+  gap: var(--forge-spacing-medium);
+}
+
+.submission-detail-list {
+  margin: 0;
+  padding-inline-start: var(--forge-spacing-large);
 }
 
 .request-details-header-row {
