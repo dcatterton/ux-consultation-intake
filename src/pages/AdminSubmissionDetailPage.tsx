@@ -1,28 +1,75 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ForgeButton, ForgeCard, ForgeInlineMessage } from '@tylertech/forge-react'
+import {
+  ForgeButton,
+  ForgeCard,
+  ForgeDivider,
+  ForgeInlineMessage,
+  ForgeLabelValue,
+} from '@tylertech/forge-react'
 import { isCurrentUserAdmin } from '../lib/authz'
 import { supabase } from '../lib/supabaseClient'
 import type { IntakeSubmissionRow } from '../types'
 
-type DetailItemProps = {
+type DetailSectionProps = {
+  title: string
+  description: string
+  children: ReactNode
+}
+
+type DetailFieldProps = {
   label: string
   value: string
 }
 
-function DetailItem({ label, value }: DetailItemProps) {
+type DetailListFieldProps = {
+  label: string
+  values: unknown
+}
+
+function DetailSection({ title, description, children }: DetailSectionProps) {
   return (
-    <div className="submission-detail-item">
-      <p className="forge-typography--label1">{label}</p>
-      <p className="forge-typography--body2">{value || 'Not provided'}</p>
-    </div>
+    <section className="submission-detail-section">
+      <h2 className="forge-typography--subheading2">{title}</h2>
+      <p className="forge-typography--body2 submission-detail-section-description">{description}</p>
+      <div className="submission-detail-fields">{children}</div>
+    </section>
   )
 }
 
-function toDisplayList(value: unknown): string {
-  if (!Array.isArray(value)) return 'Not provided'
-  const items = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-  return items.length ? items.join(', ') : 'Not provided'
+function DetailField({ label, value }: DetailFieldProps) {
+  return (
+    <ForgeLabelValue>
+      <span slot="label">{label}</span>
+      <span slot="value">{value || 'Not provided'}</span>
+    </ForgeLabelValue>
+  )
+}
+
+function toDisplayList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+function DetailListField({ label, values }: DetailListFieldProps) {
+  const items = toDisplayList(values)
+
+  return (
+    <ForgeLabelValue>
+      <span slot="label">{label}</span>
+      {items.length ? (
+        <ul slot="value" className="submission-detail-list">
+          {items.map((item) => (
+            <li key={item} className="forge-typography--body2">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <span slot="value">Not provided</span>
+      )}
+    </ForgeLabelValue>
+  )
 }
 
 function toDisplayDateTime(value: string): string {
@@ -127,28 +174,60 @@ export function AdminSubmissionDetailPage() {
           View Public Form
         </Link>
       </div>
-      <ForgeCard>
+      <ForgeCard raised>
         <section className="page-section">
           <h1 className="forge-typography--heading4">Submission Summary</h1>
-          <p className="forge-typography--body2">Review the full details captured from this intake request.</p>
+          <p className="forge-typography--body2">
+            Review the full details captured from this intake request.
+          </p>
         </section>
-        <div className="submission-detail-grid">
-          <DetailItem label="Date/Time" value={toDisplayDateTime(submission.created_at)} />
-          <DetailItem label="Requester (name)" value={requesterName} />
-          <DetailItem label="Requester email" value={requesterEmail} />
-          <DetailItem label="Application" value={application} />
-          <DetailItem label="Model or feature" value={moduleName} />
-          <DetailItem label="Deadline date" value={toDisplayDate(deadlineValue)} />
-          <DetailItem label="Primary user/persona" value={problemUserPersona} />
-          <DetailItem label="Task to complete" value={problemTask} />
-          <DetailItem label="Pain point" value={problemPainPoint} />
-          <DetailItem label="Negative outcome" value={problemNegativeOutcome} />
-          <DetailItem label="Problem statement" value={problemStatement} />
-          <DetailItem label="Assumptions" value={toDisplayList(payload.assumptions)} />
-          <DetailItem label="Open questions" value={toDisplayList(payload.questions)} />
-          <DetailItem label="Supporting links" value={toDisplayList(payload.supportingLinks)} />
-          <DetailItem label="Selected files" value={toDisplayList(payload.selectedFiles)} />
-        </div>
+
+        <ForgeDivider></ForgeDivider>
+
+        <DetailSection
+          title="Request details"
+          description="Contact information, application context, and timing for this request."
+        >
+          <DetailField label="Date/Time" value={toDisplayDateTime(submission.created_at)} />
+          <DetailField label="Requester (name)" value={requesterName} />
+          <DetailField label="Requester email" value={requesterEmail} />
+          <DetailField label="Application" value={application} />
+          <DetailField label="Module or feature" value={moduleName} />
+          <DetailField label="Deadline date" value={toDisplayDate(deadlineValue)} />
+        </DetailSection>
+
+        <ForgeDivider></ForgeDivider>
+
+        <DetailSection
+          title="Problem hypothesis"
+          description="The user problem being explored, including who is affected and why it matters."
+        >
+          <DetailField label="Primary user/persona" value={problemUserPersona} />
+          <DetailField label="Task to complete" value={problemTask} />
+          <DetailField label="Pain point" value={problemPainPoint} />
+          <DetailField label="Negative outcome" value={problemNegativeOutcome} />
+          <DetailField label="Problem statement" value={problemStatement} />
+        </DetailSection>
+
+        <ForgeDivider></ForgeDivider>
+
+        <DetailSection
+          title="Assumptions and unknowns"
+          description="Beliefs that still need validation and open questions to resolve."
+        >
+          <DetailListField label="Assumptions" values={payload.assumptions} />
+          <DetailListField label="Open questions" values={payload.questions} />
+        </DetailSection>
+
+        <ForgeDivider></ForgeDivider>
+
+        <DetailSection
+          title="Supporting materials"
+          description="Links and files shared to provide additional context."
+        >
+          <DetailListField label="Supporting links" values={payload.supportingLinks} />
+          <DetailListField label="Selected files" values={payload.selectedFiles} />
+        </DetailSection>
       </ForgeCard>
     </div>
   )
