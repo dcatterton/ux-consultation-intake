@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ForgeCard, ForgeInlineMessage, ForgeTable, ForgeTextField } from '@tylertech/forge-react'
+import {
+  ForgeButton,
+  ForgeCard,
+  ForgeInlineMessage,
+  ForgeTable,
+  ForgeTextField,
+} from '@tylertech/forge-react'
+import { CellAlign, type IColumnConfiguration } from '@tylertech/forge'
 import { isCurrentUserAdmin } from '../lib/authz'
+import { INTAKE_ATTACHMENTS_BUCKET, parseAttachments } from '../lib/attachments'
 import { supabase } from '../lib/supabaseClient'
 import type { IntakeSubmissionRow } from '../types'
-
-type TableColumnConfiguration = {
-  property: keyof DashboardTableRow
-  header: string
-}
 
 type DashboardTableRow = {
   id: string
@@ -18,14 +21,6 @@ type DashboardTableRow = {
   moduleName: string
   deadlineDisplay: string
 }
-
-const TABLE_COLUMNS: TableColumnConfiguration[] = [
-  { property: 'createdAtDisplay', header: 'Date/Time' },
-  { property: 'requesterName', header: 'Requester' },
-  { property: 'application', header: 'Application' },
-  { property: 'moduleName', header: 'Module or feature' },
-  { property: 'deadlineDisplay', header: 'Deadline date' },
-]
 
 function formatDateTime(value: string): string {
   if (!value) return 'Not provided'
@@ -46,7 +41,11 @@ export function AdminDashboardPage() {
   const [rows, setRows] = useState<IntakeSubmissionRow[]>([])
   const [filterText, setFilterText] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
   const navigate = useNavigate()
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
 
   useEffect(() => {
     async function guardAndLoad() {
@@ -125,6 +124,75 @@ export function AdminDashboardPage() {
     )
   }, [dashboardRows, filterText])
 
+  async function handleDeleteSubmission(row: DashboardTableRow) {
+    const confirmed = window.confirm(
+      `Delete the submission from ${row.requesterName}? This cannot be undone.`,
+    )
+    if (!confirmed) return
+
+    setErrorMessage('')
+    setStatusMessage('')
+    setIsDeletingId(row.id)
+
+    const fullRow = rowsRef.current.find((item) => item.id === row.id)
+    const attachmentPaths = parseAttachments(fullRow?.payload?.attachments).map((attachment) => attachment.path)
+
+    if (attachmentPaths.length) {
+      const { error: storageError } = await supabase.storage
+        .from(INTAKE_ATTACHMENTS_BUCKET)
+        .remove(attachmentPaths)
+
+      if (storageError) {
+        setErrorMessage(`Unable to delete attached files. ${storageError.message}`)
+        setIsDeletingId(null)
+        return
+      }
+    }
+
+    const { error } = await supabase.from('intake_submissions').delete().eq('id', row.id)
+
+    if (error) {
+      setErrorMessage(`Unable to delete this submission. ${error.message}`)
+      setIsDeletingId(null)
+      return
+    }
+
+    setRows((prev) => prev.filter((item) => item.id !== row.id))
+    setStatusMessage(`Deleted submission from ${row.requesterName}.`)
+    setIsDeletingId(null)
+  }
+
+  const columnConfigurations = useMemo<IColumnConfiguration[]>(
+    () => [
+      { property: 'createdAtDisplay', header: 'Date/Time' },
+      { property: 'requesterName', header: 'Requester' },
+      { property: 'application', header: 'Application' },
+      { property: 'moduleName', header: 'Module or feature' },
+      { property: 'deadlineDisplay', header: 'Deadline date' },
+      {
+        header: 'Actions',
+        align: CellAlign.Center,
+        stopCellTemplateClickPropagation: true,
+        template: (_rowIndex, _div, rowData: DashboardTableRow) => {
+          const button = document.createElement('forge-icon-button')
+          button.setAttribute('type', 'button')
+          button.setAttribute('aria-label', `Delete submission from ${rowData.requesterName}`)
+          if (isDeletingId === rowData.id) {
+            button.setAttribute('disabled', '')
+          }
+          button.innerHTML = '<forge-icon name="delete" external></forge-icon>'
+          button.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void handleDeleteSubmission(rowData)
+          })
+          return button
+        },
+      },
+    ],
+    [isDeletingId],
+  )
+
   function handleTableNavigate(event: Event) {
     const customEvent = event as CustomEvent<{ data?: DashboardTableRow }>
     const rowId = customEvent.detail?.data?.id
@@ -159,7 +227,7 @@ export function AdminDashboardPage() {
       </div>
       <ForgeTable
         data={filteredRows}
-        columnConfigurations={TABLE_COLUMNS}
+        columnConfigurations={columnConfigurations}
         multiselect={false}
         selectKey="id"
         allowRowClick
@@ -168,7 +236,15 @@ export function AdminDashboardPage() {
           'on-forge-table-select': handleTableNavigate,
         }}
       ></ForgeTable>
+      {statusMessage && <ForgeInlineMessage theme="success">{statusMessage}</ForgeInlineMessage>}
       {errorMessage && <ForgeInlineMessage theme="error">{errorMessage}</ForgeInlineMessage>}
+      {isDeletingId ? (
+        <div className="form-actions intake-mt-medium">
+          <ForgeButton variant="text" disabled>
+            Deleting...
+          </ForgeButton>
+        </div>
+      ) : null}
     </ForgeCard>
   )
 }
