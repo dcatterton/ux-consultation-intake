@@ -106,6 +106,21 @@ body {
   padding-inline-start: var(--forge-spacing-large);
 }
 
+.submission-attachment-list {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.submission-attachment-item {
+  display: grid;
+  gap: var(--forge-spacing-xxsmall);
+  margin-bottom: var(--forge-spacing-small);
+}
+
+.submission-attachment-error {
+  color: var(--forge-theme-text-medium);
+}
+
 .request-details-header-row {
   display: flex;
   align-items: center;

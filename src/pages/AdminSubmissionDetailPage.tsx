@@ -8,6 +8,11 @@ import {
   ForgeLabelValue,
 } from '@tylertech/forge-react'
 import { isCurrentUserAdmin } from '../lib/authz'
+import {
+  INTAKE_ATTACHMENTS_BUCKET,
+  parseAttachments,
+  type SubmissionAttachment,
+} from '../lib/attachments'
 import { supabase } from '../lib/supabaseClient'
 import type { IntakeSubmissionRow } from '../types'
 
@@ -25,6 +30,11 @@ type DetailFieldProps = {
 type DetailListFieldProps = {
   label: string
   values: unknown
+}
+
+type AttachmentDownload = SubmissionAttachment & {
+  url?: string
+  error?: string
 }
 
 function DetailSection({ title, description, children }: DetailSectionProps) {
@@ -61,13 +71,68 @@ function DetailListField({ label, values }: DetailListFieldProps) {
         <ul slot="value" className="submission-detail-list">
           {items.map((item) => (
             <li key={item} className="forge-typography--body2">
-              {item}
+              {/^https?:\/\//i.test(item) ? (
+                <a href={item} target="_blank" rel="noreferrer" className="link-inline">
+                  {item}
+                </a>
+              ) : (
+                item
+              )}
             </li>
           ))}
         </ul>
       ) : (
         <span slot="value">Not provided</span>
       )}
+    </ForgeLabelValue>
+  )
+}
+
+function AttachmentListField({
+  label,
+  attachments,
+  legacyNames,
+}: {
+  label: string
+  attachments: AttachmentDownload[]
+  legacyNames: string[]
+}) {
+  if (!attachments.length && !legacyNames.length) {
+    return (
+      <ForgeLabelValue>
+        <span slot="label">{label}</span>
+        <span slot="value">Not provided</span>
+      </ForgeLabelValue>
+    )
+  }
+
+  return (
+    <ForgeLabelValue>
+      <span slot="label">{label}</span>
+      <ul slot="value" className="submission-detail-list submission-attachment-list">
+        {attachments.map((attachment) => (
+          <li key={attachment.path} className="submission-attachment-item">
+            {attachment.url ? (
+              <a href={attachment.url} target="_blank" rel="noreferrer" className="link-inline">
+                {attachment.name}
+              </a>
+            ) : (
+              <span className="forge-typography--body2">{attachment.name}</span>
+            )}
+            {attachment.error ? (
+              <span className="forge-typography--label1 submission-attachment-error">{attachment.error}</span>
+            ) : null}
+          </li>
+        ))}
+        {legacyNames.map((name) => (
+          <li key={`legacy-${name}`} className="submission-attachment-item">
+            <span className="forge-typography--body2">{name}</span>
+            <span className="forge-typography--label1 submission-attachment-error">
+              File name only (not uploaded to storage)
+            </span>
+          </li>
+        ))}
+      </ul>
     </ForgeLabelValue>
   )
 }
@@ -92,6 +157,7 @@ export function AdminSubmissionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
   const [submission, setSubmission] = useState<IntakeSubmissionRow | null>(null)
+  const [attachments, setAttachments] = useState<AttachmentDownload[]>([])
   const [errorMessage, setErrorMessage] = useState('')
   const navigate = useNavigate()
 
@@ -122,6 +188,28 @@ export function AdminSubmissionDetailPage() {
       }
 
       const payload = data.payload ?? {}
+      const parsedAttachments = parseAttachments(payload.attachments)
+      const signedAttachments = await Promise.all(
+        parsedAttachments.map(async (attachment) => {
+          const { data: signed, error: signedError } = await supabase.storage
+            .from(INTAKE_ATTACHMENTS_BUCKET)
+            .createSignedUrl(attachment.path, 60 * 60)
+
+          if (signedError || !signed?.signedUrl) {
+            return {
+              ...attachment,
+              error: signedError?.message || 'Unable to create download link',
+            }
+          }
+
+          return {
+            ...attachment,
+            url: signed.signedUrl,
+          }
+        }),
+      )
+
+      setAttachments(signedAttachments)
       setSubmission({
         id: data.id,
         submitted_email: data.submitted_email ?? '',
@@ -163,6 +251,8 @@ export function AdminSubmissionDetailPage() {
   const problemStatement = typeof payload.problemStatement === 'string' ? payload.problemStatement : submission.details
   const deadlineValue =
     payload.deadline ?? (typeof payload.deadlineDate === 'string' ? payload.deadlineDate : null)
+  const attachmentNames = new Set(attachments.map((attachment) => attachment.name))
+  const legacyFileNames = toDisplayList(payload.selectedFiles).filter((name) => !attachmentNames.has(name))
 
   return (
     <div className="submission-detail-page">
@@ -226,7 +316,7 @@ export function AdminSubmissionDetailPage() {
           description="Links and files shared to provide additional context."
         >
           <DetailListField label="Supporting links" values={payload.supportingLinks} />
-          <DetailListField label="Selected files" values={payload.selectedFiles} />
+          <AttachmentListField label="Selected files" attachments={attachments} legacyNames={legacyFileNames} />
         </DetailSection>
       </ForgeCard>
     </div>

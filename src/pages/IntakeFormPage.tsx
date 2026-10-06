@@ -14,8 +14,21 @@ import {
   ForgeRadioGroup,
   ForgeTextField,
 } from '@tylertech/forge-react'
+import {
+  buildAttachmentPath,
+  INTAKE_ATTACHMENTS_BUCKET,
+  type SubmissionAttachment,
+} from '../lib/attachments'
 import { supabase } from '../lib/supabaseClient'
 import type { IntakeSubmissionInsert } from '../types'
+
+type PickedFile = {
+  id: string
+  name: string
+  legal: boolean
+  error?: string
+  file?: File
+}
 
 type IntakeFormValues = {
   requesterName: string
@@ -104,9 +117,7 @@ export function IntakeFormPage() {
   const [aiProblemStatement, setAiProblemStatement] = useState<string>('')
   const [isRewritingProblemStatement, setIsRewritingProblemStatement] = useState(false)
   const [problemStatementRewriteError, setProblemStatementRewriteError] = useState<string>('')
-  const [pickedFiles, setPickedFiles] = useState<Array<{ id: string; name: string; legal: boolean; error?: string }>>(
-    [],
-  )
+  const [pickedFiles, setPickedFiles] = useState<PickedFile[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const filePickerRef = useRef<HTMLElement | null>(null)
   const rewriteDebounceTimeoutRef = useRef<number | null>(null)
@@ -257,6 +268,7 @@ export function IntakeFormPage() {
         id: `legal-${timestamp}-${index}`,
         name: file.name,
         legal: true,
+        file,
       }))
       const nextIllegal = illegalFiles.map((file, index) => ({
         id: `illegal-${timestamp}-${index}`,
@@ -284,7 +296,40 @@ export function IntakeFormPage() {
     const normalizedEmail = formValues.requesterEmail.trim().toLowerCase()
     const normalizedName = formValues.requesterName.trim()
     const normalizedApplication = formValues.application.trim()
-    const selectedFiles = pickedFiles.filter((file) => file.legal).map((file) => file.name)
+    const legalFiles = pickedFiles.filter((item) => item.legal && item.file)
+
+    let attachments: SubmissionAttachment[] = []
+    if (legalFiles.length) {
+      const folderId = crypto.randomUUID()
+      const uploaded: SubmissionAttachment[] = []
+
+      for (const item of legalFiles) {
+        const file = item.file
+        if (!file) continue
+
+        const path = buildAttachmentPath(folderId, file.name)
+        const { error: uploadError } = await supabase.storage.from(INTAKE_ATTACHMENTS_BUCKET).upload(path, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || undefined,
+        })
+
+        if (uploadError) {
+          setErrorMessage(`We could not upload "${file.name}". ${uploadError.message}`)
+          setIsSubmitting(false)
+          return
+        }
+
+        uploaded.push({
+          name: file.name,
+          path,
+          size: file.size,
+          contentType: file.type || undefined,
+        })
+      }
+
+      attachments = uploaded
+    }
 
     const payload: IntakeSubmissionInsert = {
       submitted_email: normalizedEmail,
@@ -306,7 +351,8 @@ export function IntakeFormPage() {
         assumptions: formValues.assumptions.map((value) => value.trim()).filter(Boolean),
         questions: formValues.questions.map((value) => value.trim()).filter(Boolean),
         supportingLinks: formValues.supportingLinks.map((value) => value.trim()).filter(Boolean),
-        selectedFiles,
+        attachments,
+        selectedFiles: attachments.map((file) => file.name),
       },
       status: 'new',
     }

@@ -1,3 +1,5 @@
+import type { SubmissionAttachment } from './lib/attachments'
+
 export type IntakeSubmissionInsert = {
   submitted_email: string
   payload: Record<string, unknown> & {
@@ -5,6 +7,8 @@ export type IntakeSubmissionInsert = {
     email: string
     organization: string | null
     details: string
+    attachments?: SubmissionAttachment[]
+    selectedFiles?: string[]
   }
   status: string
 }
@@ -32,6 +36,7 @@ export type IntakeSubmissionRow = {
     questions?: string[]
     supportingLinks?: string[]
     selectedFiles?: string[]
+    attachments?: SubmissionAttachment[]
   } | null
   full_name: string
   email: string
