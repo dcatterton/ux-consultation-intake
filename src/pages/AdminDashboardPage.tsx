@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  ForgeButton,
-  ForgeCard,
-  ForgeInlineMessage,
-  ForgeTable,
-  ForgeTextField,
-} from '@tylertech/forge-react'
+import { ForgeCard, ForgeInlineMessage, ForgeTable, ForgeTextField } from '@tylertech/forge-react'
 import { CellAlign, type IColumnConfiguration } from '@tylertech/forge'
 import { isCurrentUserAdmin } from '../lib/authz'
 import { INTAKE_ATTACHMENTS_BUCKET, parseAttachments } from '../lib/attachments'
@@ -238,13 +232,6 @@ export function AdminDashboardPage() {
       ></ForgeTable>
       {statusMessage && <ForgeInlineMessage theme="success">{statusMessage}</ForgeInlineMessage>}
       {errorMessage && <ForgeInlineMessage theme="error">{errorMessage}</ForgeInlineMessage>}
-      {isDeletingId ? (
-        <div className="form-actions intake-mt-medium">
-          <ForgeButton variant="text" disabled>
-            Deleting...
-          </ForgeButton>
-        </div>
-      ) : null}
     </ForgeCard>
   )
 }
