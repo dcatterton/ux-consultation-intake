@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { ForgeAppBar, ForgeButton, ForgeIcon } from '@tylertech/forge-react'
+import { ForgeAppBar, ForgeButton, ForgeIcon, ForgeInlineMessage } from '@tylertech/forge-react'
 import { AdminDashboardPage } from './pages/AdminDashboardPage'
 import { AdminLoginPage } from './pages/AdminLoginPage'
 import { AdminSubmissionDetailPage } from './pages/AdminSubmissionDetailPage'
-import { supabase } from './lib/supabaseClient'
+import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
 import { IntakeFormPage } from './pages/IntakeFormPage'
 
 function App() {
@@ -14,6 +14,8 @@ function App() {
   const contentClassName = location.pathname.startsWith('/admin') ? 'app-content app-content-admin' : 'app-content'
 
   useEffect(() => {
+    if (!hasSupabaseConfig) return
+
     let isMounted = true
 
     void supabase.auth.getSession().then(({ data }) => {
@@ -34,6 +36,8 @@ function App() {
   }, [])
 
   async function handleAppBarAuthAction() {
+    if (!hasSupabaseConfig) return
+
     if (isAuthenticated) {
       await supabase.auth.signOut()
       navigate('/')
@@ -53,13 +57,20 @@ function App() {
         </ForgeButton>
       </ForgeAppBar>
       <main className={contentClassName}>
-        <Routes>
-          <Route path="/" element={<IntakeFormPage />} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin" element={<AdminDashboardPage />} />
-          <Route path="/admin/submissions/:id" element={<AdminSubmissionDetailPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        {!hasSupabaseConfig ? (
+          <ForgeInlineMessage theme="error">
+            Missing Supabase configuration. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to a `.env` file,
+            then restart the dev server.
+          </ForgeInlineMessage>
+        ) : (
+          <Routes>
+            <Route path="/" element={<IntakeFormPage />} />
+            <Route path="/admin/login" element={<AdminLoginPage />} />
+            <Route path="/admin" element={<AdminDashboardPage />} />
+            <Route path="/admin/submissions/:id" element={<AdminSubmissionDetailPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        )}
       </main>
     </div>
   )
